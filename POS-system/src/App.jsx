@@ -6,12 +6,14 @@ import Topbar from './components/Layout/Topbar';
 import ReportsPage from './components/Reports/ReportsPage';
 import SalesPage from './components/Sales/SalesPage';
 import InventoryPage from './components/Inventory/InventoryPage';
+import InvoicesPage from './components/Invoices/InvoicesPage';
 import SettingsPage from './components/Settings/SettingsPage';
 
 const pageTitles = {
   '/': 'Dashboard',
   '/sales': 'Sales Terminal',
   '/inventory': 'Inventory Management',
+  '/invoices': 'Invoices',
   '/settings': 'Settings'
 };
 
@@ -42,6 +44,7 @@ export default function App() {
               <Route path="/" element={<ReportsPage />} />
               <Route path="/sales" element={<SalesPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/invoices" element={<InvoicesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

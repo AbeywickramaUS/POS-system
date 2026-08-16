@@ -8,7 +8,7 @@ const saleItemSchema = new mongoose.Schema({
   },
   name: { type: String, required: true },
   barcode: { type: String, default: '' },
-  quantity: { type: Number, required: true, min: 1 },
+  quantity: { type: Number, required: true, min: 0.001 },
   unitPrice: { type: Number, required: true, min: 0 },
   discount: { type: Number, default: 0, min: 0 },
   lineTotal: { type: Number, required: true }

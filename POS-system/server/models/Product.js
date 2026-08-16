@@ -41,7 +41,12 @@ const productSchema = new mongoose.Schema({
   unit: {
     type: String,
     default: 'pcs',
-    enum: ['pcs', 'kg', 'g', 'litre', 'ml', 'pack', 'box', 'dozen']
+    enum: ['pcs', 'kg', 'g', 'litre', 'ml', 'pack', 'box', 'dozen', 'lb']
+  },
+  // If true, this product is sold in decimal/fractional quantities (e.g. rice by weight)
+  allowDecimal: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

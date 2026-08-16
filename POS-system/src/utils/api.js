@@ -24,7 +24,8 @@ export const productsAPI = {
 export const salesAPI = {
   checkout: (data) => api.post('/sales/checkout', data),
   getAll: (params) => api.get('/sales', { params }),
-  getById: (id) => api.get(`/sales/${id}`)
+  getById: (id) => api.get(`/sales/${id}`),
+  delete: (id) => api.delete(`/sales/${id}`)
 };
 
 // Settings API

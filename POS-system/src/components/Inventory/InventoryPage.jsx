@@ -20,6 +20,12 @@ export default function InventoryPage() {
   const [editingProduct, setEditingProduct] = React.useState(null);
   const [deleteConfirm, setDeleteConfirm] = React.useState(null);
 
+  // Barcode scan state
+  const [barcodeInput, setBarcodeInput] = React.useState('');
+  const [prefillBarcode, setPrefillBarcode] = React.useState('');
+  const [highlightId, setHighlightId] = React.useState(null);
+  const barcodeRef = React.useRef(null);
+
   React.useEffect(() => {
     loadCategories();
   }, []);
@@ -27,6 +33,14 @@ export default function InventoryPage() {
   React.useEffect(() => {
     loadProducts();
   }, [search, categoryFilter, showLowStock, page]);
+
+  // Clear highlight after 2.5 seconds
+  React.useEffect(() => {
+    if (highlightId) {
+      const timer = setTimeout(() => setHighlightId(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightId]);
 
   const loadProducts = async () => {
     try {
@@ -58,11 +72,13 @@ export default function InventoryPage() {
 
   const handleAddNew = () => {
     setEditingProduct(null);
+    setPrefillBarcode('');
     setModalOpen(true);
   };
 
   const handleEdit = (product) => {
     setEditingProduct(product);
+    setPrefillBarcode('');
     setModalOpen(true);
   };
 
@@ -97,12 +113,48 @@ export default function InventoryPage() {
         toast.success('Product added');
       }
       setModalOpen(false);
+      setPrefillBarcode('');
       loadProducts();
       loadCategories();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to save product');
       throw err; // Let the modal handle it
     }
+  };
+
+  // Barcode scan handler
+  const handleBarcodeScan = async (e) => {
+    e.preventDefault();
+    const barcode = barcodeInput.trim();
+    if (!barcode) return;
+
+    try {
+      const { data: product } = await productsAPI.getByBarcode(barcode);
+      // Product found — highlight it in the table
+      toast.info(`Found: "${product.name}" — highlighted in the table`);
+      setHighlightId(product._id);
+
+      // Scroll the row into view
+      setTimeout(() => {
+        const row = document.getElementById(`product-row-${product._id}`);
+        if (row) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+    } catch (err) {
+      if (err.response?.status === 404) {
+        // Product not found — open Add Product form with barcode pre-filled
+        toast.info(`No product with barcode "${barcode}" — opening Add Product form`);
+        setEditingProduct(null);
+        setPrefillBarcode(barcode);
+        setModalOpen(true);
+      } else {
+        toast.error('Barcode lookup failed');
+      }
+    }
+
+    setBarcodeInput('');
+    barcodeRef.current?.focus();
   };
 
   const getStockStatus = (product) => {
@@ -113,6 +165,40 @@ export default function InventoryPage() {
 
   return (
     <div className="animate-fade-in">
+      {/* Barcode Scanner Input */}
+      <form onSubmit={handleBarcodeScan} className="barcode-input-wrapper">
+        <FiSearch className="icon" />
+        <input
+          ref={barcodeRef}
+          type="text"
+          className="barcode-input"
+          placeholder="Scan barcode to find or add a new product..."
+          value={barcodeInput}
+          onChange={(e) => setBarcodeInput(e.target.value)}
+        />
+        <div style={{
+          position: 'absolute',
+          right: 16,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: 12,
+          color: 'var(--text-muted)'
+        }}>
+          <span style={{
+            background: 'var(--bg-secondary)',
+            padding: '3px 8px',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border-color)',
+            fontSize: 11
+          }}>
+            Press Enter
+          </span>
+        </div>
+      </form>
+
       {/* Toolbar */}
       <div className="toolbar">
         <div className="toolbar-group">
@@ -194,8 +280,17 @@ export default function InventoryPage() {
             ) : (
               products.map((product) => {
                 const status = getStockStatus(product);
+                const isHighlighted = highlightId === product._id;
                 return (
-                  <tr key={product._id}>
+                  <tr
+                    key={product._id}
+                    id={`product-row-${product._id}`}
+                    style={{
+                      background: isHighlighted ? 'rgba(79, 70, 229, 0.15)' : undefined,
+                      transition: 'background 0.4s ease',
+                      boxShadow: isHighlighted ? 'inset 3px 0 0 var(--accent-primary)' : undefined
+                    }}
+                  >
                     <td style={{ fontWeight: 500 }}>{product.name}</td>
                     <td style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>
                       {product.barcode || '—'}
@@ -282,8 +377,9 @@ export default function InventoryPage() {
         <ProductFormModal
           product={editingProduct}
           categories={categories}
+          prefillBarcode={prefillBarcode}
           onSave={handleSaveProduct}
-          onClose={() => setModalOpen(false)}
+          onClose={() => { setModalOpen(false); setPrefillBarcode(''); }}
         />
       )}
 

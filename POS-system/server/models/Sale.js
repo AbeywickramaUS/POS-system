@@ -37,9 +37,33 @@ const saleSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  paymentType: {
+    type: String,
+    enum: ['cash', 'credit'],
+    default: 'cash',
+    index: true
+  },
+  borrower: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Borrower',
+    default: null
+  },
+  borrowerName: {
+    type: String,
+    default: ''
+  },
+  borrowerPhone: {
+    type: String,
+    default: ''
+  },
+  creditAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   cashReceived: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   changeGiven: {

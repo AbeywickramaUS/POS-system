@@ -42,4 +42,17 @@ export const reportsAPI = {
   getLowStock: () => api.get('/reports/low-stock')
 };
 
+// Borrowers / Loan & Credit API
+export const borrowersAPI = {
+  getAll: (params) => api.get('/borrowers', { params }),
+  getStats: () => api.get('/borrowers/stats'),
+  getById: (id) => api.get(`/borrowers/${id}`),
+  create: (data) => api.post('/borrowers', data),
+  update: (id, data) => api.put(`/borrowers/${id}`, data),
+  delete: (id, params) => api.delete(`/borrowers/${id}`, { params }),
+  getTransactions: (id, params) => api.get(`/borrowers/${id}/transactions`, { params }),
+  recordPayment: (id, data) => api.post(`/borrowers/${id}/payments`, data),
+  recordManualLoan: (id, data) => api.post(`/borrowers/${id}/manual-loan`, data)
+};
+
 export default api;

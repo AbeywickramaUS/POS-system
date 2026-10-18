@@ -8,6 +8,7 @@ const productsRouter = require('./routes/products');
 const salesRouter = require('./routes/sales');
 const settingsRouter = require('./routes/settings');
 const reportsRouter = require('./routes/reports');
+const borrowersRouter = require('./routes/borrowers');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +22,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/sales', salesRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/borrowers', borrowersRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

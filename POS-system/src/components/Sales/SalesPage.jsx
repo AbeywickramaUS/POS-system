@@ -1,10 +1,12 @@
 import React from 'react';
 import {
   FiSearch, FiTrash2, FiMinus, FiPlus, FiShoppingCart,
-  FiPrinter, FiCheckCircle, FiXCircle, FiDollarSign
+  FiPrinter, FiCheckCircle, FiXCircle, FiDollarSign,
+  FiUser, FiUsers, FiCreditCard, FiAlertCircle
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { productsAPI, salesAPI, settingsAPI } from '../../utils/api';
+import { productsAPI, salesAPI, settingsAPI, borrowersAPI } from '../../utils/api';
+import BorrowerFormModal from '../Loans/BorrowerFormModal';
 
 /* ─── Unit conversion table ───────────────────────────────
    For a product stored in kg: cashier can sell in g or kg.
@@ -29,6 +31,13 @@ export default function SalesPage() {
   const [orderDiscount, setOrderDiscount] = React.useState(0);
   const [cashReceived, setCashReceived] = React.useState('');
 
+  // Customer Type — default 'cash' as requested
+  const [customerType, setCustomerType] = React.useState('cash'); // 'cash' | 'credit'
+  const [borrowers, setBorrowers] = React.useState([]);
+  const [selectedBorrowerId, setSelectedBorrowerId] = React.useState('');
+  const [upfrontPaid, setUpfrontPaid] = React.useState('');
+  const [showQuickBorrowerModal, setShowQuickBorrowerModal] = React.useState(false);
+
   const [barcodeInput, setBarcodeInput] = React.useState('');
   const barcodeRef = React.useRef(null);
 
@@ -44,6 +53,7 @@ export default function SalesPage() {
 
   React.useEffect(() => {
     loadSettings();
+    loadBorrowers();
     focusBarcode();
   }, []);
 
@@ -52,6 +62,27 @@ export default function SalesPage() {
       const { data } = await settingsAPI.get();
       setSettings(data);
     } catch {}
+  };
+
+  const loadBorrowers = async () => {
+    try {
+      const { data } = await borrowersAPI.getAll({ limit: 100, status: 'active' });
+      setBorrowers(data.borrowers || []);
+    } catch {}
+  };
+
+  const handleQuickBorrowerSaved = async (formData) => {
+    try {
+      const res = await borrowersAPI.create(formData);
+      toast.success(`Borrower profile "${res.data.name}" created`);
+      setShowQuickBorrowerModal(false);
+      const { data } = await borrowersAPI.getAll({ limit: 100, status: 'active' });
+      setBorrowers(data.borrowers || []);
+      setSelectedBorrowerId(res.data._id);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to create borrower profile');
+      throw err;
+    }
   };
 
   const focusBarcode = () => setTimeout(() => barcodeRef.current?.focus(), 100);
@@ -200,16 +231,35 @@ export default function SalesPage() {
     setCart(prev => prev.filter(i => i.productId !== productId));
 
   const clearCart = () => {
-    setCart([]); setOrderDiscount(0); setCashReceived('');
+    setCart([]);
+    setOrderDiscount(0);
+    setCashReceived('');
+    setUpfrontPaid('');
+    setCustomerType('cash'); // Reset to default 'cash'
+    setSelectedBorrowerId('');
     focusBarcode();
   };
 
   // ── Totals ───────────────────────────────────────────────
   const subtotal = cart.reduce((s, i) => s + lineTotal(i), 0);
   const grandTotal = Math.max(0, subtotal - orderDiscount);
+
+  // Cash payment calculations
   const cashNum = parseFloat(cashReceived) || 0;
-  const changeGiven = cashNum - grandTotal;
-  const canCheckout = cart.length > 0 && cashNum >= grandTotal;
+  const cashChangeGiven = cashNum - grandTotal;
+
+  // Credit customer calculations
+  const selectedBorrower = borrowers.find(b => b._id === selectedBorrowerId);
+  const upfrontNum = parseFloat(upfrontPaid) || 0;
+  const creditOwed = Math.max(0, grandTotal - upfrontNum);
+  const creditChangeGiven = upfrontNum > grandTotal ? upfrontNum - grandTotal : 0;
+  const exceedsCreditLimit = selectedBorrower?.creditLimit > 0 &&
+    (selectedBorrower.currentBalance + creditOwed) > selectedBorrower.creditLimit;
+
+  // Validation for checkout
+  const canCheckout = customerType === 'cash'
+    ? (cart.length > 0 && cashNum >= grandTotal)
+    : (cart.length > 0 && !!selectedBorrowerId && !exceedsCreditLimit);
 
   // ── Checkout ─────────────────────────────────────────────
   const handleCheckout = async () => {
@@ -224,11 +274,14 @@ export default function SalesPage() {
           discount: item.discount
         })),
         orderDiscount,
-        cashReceived: cashNum
+        paymentType: customerType,
+        borrowerId: customerType === 'credit' ? selectedBorrowerId : null,
+        cashReceived: customerType === 'credit' ? upfrontNum : cashNum
       };
       const { data: sale } = await salesAPI.checkout(saleData);
       setLastSale(sale);
       setShowSuccess(true);
+      loadBorrowers(); // Refresh borrower balances
 
       if (window.electronAPI && settings?.printerName) {
         try {
@@ -237,8 +290,12 @@ export default function SalesPage() {
         } catch { toast.warning('Could not print receipt'); }
       }
 
-      toast.success(`Sale completed! Invoice: ${sale.invoiceNo}`);
-      setTimeout(() => { clearCart(); setShowSuccess(false); setLastSale(null); }, 3000);
+      toast.success(
+        customerType === 'credit'
+          ? `Credit sale completed! Charged to ${sale.borrowerName}. Invoice: ${sale.invoiceNo}`
+          : `Sale completed! Invoice: ${sale.invoiceNo}`
+      );
+      setTimeout(() => { clearCart(); setShowSuccess(false); setLastSale(null); }, 3500);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Checkout failed');
     } finally {
@@ -475,7 +532,7 @@ export default function SalesPage() {
         {/* ── RIGHT: Checkout panel ─────────────────────── */}
         <div className="sales-panel">
           <div className="checkout-summary">
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>
               <FiDollarSign style={{ marginRight: 6 }} /> Order Summary
             </h3>
 
@@ -496,37 +553,209 @@ export default function SalesPage() {
               <span>Rs. {grandTotal.toFixed(2)}</span>
             </div>
 
-            <div className="form-group" style={{ marginTop: 16 }}>
-              <label className="form-label">Cash Received (Rs.)</label>
-              <input type="number" className="form-input" placeholder="Enter cash amount"
-                min="0" step="0.01" value={cashReceived}
-                onChange={e => setCashReceived(e.target.value)}
-                style={{ fontSize: 18, fontWeight: 600, textAlign: 'right', padding: '12px 14px' }} />
+            {/* ── CUSTOMER / PAYMENT MODE SELECTOR (Default: Cash) ── */}
+            <div style={{ marginTop: 18, marginBottom: 14 }}>
+              <label className="form-label" style={{
+                marginBottom: 8, fontSize: 11, textTransform: 'uppercase',
+                letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600
+              }}>
+                Customer Type
+              </label>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 6,
+                background: 'var(--bg-primary)',
+                padding: 4,
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-color)'
+              }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${customerType === 'cash' ? 'btn-success' : 'btn-ghost'}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    fontWeight: customerType === 'cash' ? 700 : 500,
+                    padding: '8px 10px'
+                  }}
+                  onClick={() => setCustomerType('cash')}
+                >
+                  <FiDollarSign size={15} /> Cash Customer
+                </button>
+
+                <button
+                  type="button"
+                  className={`btn btn-sm ${customerType === 'credit' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    fontWeight: customerType === 'credit' ? 700 : 500,
+                    padding: '8px 10px'
+                  }}
+                  onClick={() => setCustomerType('credit')}
+                >
+                  <FiCreditCard size={15} /> Credit Customer
+                </button>
+              </div>
             </div>
 
-            {cashNum > 0 && cashNum >= grandTotal && (
-              <div className="change-display">
-                <div className="label">Change</div>
-                <div className="amount">Rs. {changeGiven.toFixed(2)}</div>
-              </div>
+            {/* ── CASH CUSTOMER SECTION ── */}
+            {customerType === 'cash' && (
+              <>
+                <div className="form-group" style={{ marginTop: 14 }}>
+                  <label className="form-label">Cash Received (Rs.)</label>
+                  <input type="number" className="form-input" placeholder="Enter cash amount"
+                    min="0" step="0.01" value={cashReceived}
+                    onChange={e => setCashReceived(e.target.value)}
+                    style={{ fontSize: 18, fontWeight: 600, textAlign: 'right', padding: '12px 14px' }} />
+                </div>
+
+                {cashNum > 0 && cashNum >= grandTotal && (
+                  <div className="change-display">
+                    <div className="label">Change</div>
+                    <div className="amount">Rs. {cashChangeGiven.toFixed(2)}</div>
+                  </div>
+                )}
+
+                {cashNum > 0 && cashNum < grandTotal && (
+                  <div style={{
+                    textAlign: 'center', padding: 10, background: 'var(--danger-bg)',
+                    borderRadius: 'var(--radius-md)', marginTop: 8,
+                    color: 'var(--danger)', fontSize: 12, fontWeight: 500
+                  }}>
+                    Insufficient cash — need Rs. {(grandTotal - cashNum).toFixed(2)} more
+                  </div>
+                )}
+              </>
             )}
 
-            {cashNum > 0 && cashNum < grandTotal && (
-              <div style={{
-                textAlign: 'center', padding: 12, background: 'var(--danger-bg)',
-                borderRadius: 'var(--radius-md)', marginTop: 10,
-                color: 'var(--danger)', fontSize: 13, fontWeight: 500
-              }}>
-                Insufficient cash — need Rs. {(grandTotal - cashNum).toFixed(2)} more
+            {/* ── CREDIT CUSTOMER SECTION ── */}
+            {customerType === 'credit' && (
+              <div style={{ marginTop: 14 }}>
+                {/* Borrower Selector */}
+                <div className="form-group" style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      Select Borrower Profile *
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ fontSize: 11, padding: '2px 8px', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => setShowQuickBorrowerModal(true)}
+                    >
+                      <FiPlus size={12} /> New Profile
+                    </button>
+                  </div>
+
+                  <select
+                    className="form-select"
+                    value={selectedBorrowerId}
+                    onChange={e => setSelectedBorrowerId(e.target.value)}
+                    style={{
+                      borderColor: !selectedBorrowerId ? 'var(--warning)' : undefined,
+                      fontSize: 13
+                    }}
+                  >
+                    <option value="">-- Choose Borrower Account --</option>
+                    {borrowers.map(b => (
+                      <option key={b._id} value={b._id}>
+                        {b.name} {b.phone ? `(${b.phone})` : ''} — Debt: Rs. {b.currentBalance.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Borrower Details Card */}
+                {selectedBorrower && (
+                  <div style={{
+                    background: 'rgba(79, 70, 229, 0.08)',
+                    border: '1px solid rgba(79, 70, 229, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '10px 12px',
+                    marginBottom: 12,
+                    fontSize: 12
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                      <span style={{ color: 'var(--text-primary)' }}>{selectedBorrower.name}</span>
+                      <span style={{ color: selectedBorrower.currentBalance > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                        Debt: Rs. {selectedBorrower.currentBalance.toFixed(2)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+                      <span>{selectedBorrower.phone || selectedBorrower.nic || 'Registered'}</span>
+                      <span>
+                        Limit: {selectedBorrower.creditLimit > 0 ? `Rs. ${selectedBorrower.creditLimit.toFixed(2)}` : 'Unlimited'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Upfront Payment */}
+                <div className="form-group" style={{ marginBottom: 12 }}>
+                  <label className="form-label" style={{ fontSize: 12 }}>
+                    Upfront Paid (Rs.) <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional down payment)</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    value={upfrontPaid}
+                    onChange={e => setUpfrontPaid(e.target.value)}
+                    style={{ textAlign: 'right', fontWeight: 600 }}
+                  />
+                </div>
+
+                {/* Credit Debt Calculation Box */}
+                <div style={{
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 10
+                }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)' }}>
+                    Added to Customer Debt:
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--danger)' }}>
+                    Rs. {creditOwed.toFixed(2)}
+                  </span>
+                </div>
+
+                {exceedsCreditLimit && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'var(--danger-bg)', color: 'var(--danger)',
+                    padding: '8px 10px', borderRadius: 'var(--radius-sm)',
+                    fontSize: 11, marginBottom: 10
+                  }}>
+                    <FiAlertCircle size={14} />
+                    <span>Exceeds borrower credit limit of Rs. {selectedBorrower?.creditLimit.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          <button className="btn btn-success btn-lg" onClick={handleCheckout}
-            disabled={!canCheckout || checkingOut} style={{ width: '100%' }}>
-            {checkingOut
-              ? <><span className="loading-spinner" style={{ width: 16, height: 16 }}></span> Processing...</>
-              : <><FiCheckCircle /> Complete Sale</>}
+          {/* Checkout Button */}
+          <button
+            className={`btn ${customerType === 'credit' ? 'btn-primary' : 'btn-success'} btn-lg`}
+            onClick={handleCheckout}
+            disabled={!canCheckout || checkingOut}
+            style={{ width: '100%' }}
+          >
+            {checkingOut ? (
+              <><span className="loading-spinner" style={{ width: 16, height: 16 }}></span> Processing...</>
+            ) : customerType === 'credit' ? (
+              <><FiCreditCard /> Issue Credit Bill (Rs. {creditOwed.toFixed(2)} on Credit)</>
+            ) : (
+              <><FiCheckCircle /> Complete Cash Sale</>
+            )}
           </button>
 
           {lastSale && (
@@ -535,7 +764,8 @@ export default function SalesPage() {
             </button>
           )}
 
-          {cart.length > 0 && (
+          {/* Quick Cash Buttons (only for cash customer) */}
+          {customerType === 'cash' && cart.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {[100, 500, 1000, 2000, 5000, 'Exact'].map(amount => (
                 <button key={amount} className="btn btn-secondary btn-sm"
@@ -548,6 +778,14 @@ export default function SalesPage() {
         </div>
       </div>
 
+      {/* Quick Borrower Creation Modal */}
+      {showQuickBorrowerModal && (
+        <BorrowerFormModal
+          onSave={handleQuickBorrowerSaved}
+          onClose={() => setShowQuickBorrowerModal(false)}
+        />
+      )}
+
       {/* Success overlay */}
       {showSuccess && lastSale && (
         <div style={{
@@ -557,22 +795,53 @@ export default function SalesPage() {
         }}>
           <div style={{
             background: 'var(--bg-secondary)', borderRadius: 'var(--radius-xl)',
-            padding: 40, textAlign: 'center', maxWidth: 400,
-            animation: 'slideUp 300ms ease'
+            padding: 40, textAlign: 'center', maxWidth: 420,
+            animation: 'slideUp 300ms ease', border: '1px solid var(--border-color)'
           }}>
             <div style={{
-              width: 64, height: 64, borderRadius: '50%', background: 'var(--success-bg)',
+              width: 64, height: 64, borderRadius: '50%',
+              background: lastSale.paymentType === 'credit' ? 'rgba(79, 70, 229, 0.15)' : 'var(--success-bg)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px', fontSize: 32, color: 'var(--success)'
+              margin: '0 auto 20px', fontSize: 32,
+              color: lastSale.paymentType === 'credit' ? 'var(--accent-primary)' : 'var(--success)'
             }}>
-              <FiCheckCircle />
+              {lastSale.paymentType === 'credit' ? <FiCreditCard /> : <FiCheckCircle />}
             </div>
-            <h2 style={{ fontSize: 22, marginBottom: 8 }}>Sale Complete!</h2>
+
+            <h2 style={{ fontSize: 22, marginBottom: 8 }}>
+              {lastSale.paymentType === 'credit' ? 'Credit Sale Issued!' : 'Cash Sale Complete!'}
+            </h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: 4 }}>Invoice: {lastSale.invoiceNo}</p>
             <p style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Rs. {lastSale.grandTotal.toFixed(2)}</p>
-            <p style={{ color: 'var(--success)', fontSize: 16, fontWeight: 600 }}>
-              Change: Rs. {lastSale.changeGiven.toFixed(2)}
-            </p>
+
+            {lastSale.paymentType === 'credit' ? (
+              <div style={{
+                background: 'rgba(79, 70, 229, 0.08)',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                marginTop: 10,
+                textAlign: 'left'
+              }}>
+                <div style={{ fontSize: 13, marginBottom: 4 }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Customer: </span>
+                  <strong>{lastSale.borrowerName}</strong>
+                </div>
+                <div style={{ fontSize: 13, marginBottom: 4, color: 'var(--danger)', fontWeight: 600 }}>
+                  <span>Added to Debt: </span>
+                  <strong>Rs. {(lastSale.creditAmount || 0).toFixed(2)}</strong>
+                </div>
+                {lastSale.cashReceived > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--success)' }}>
+                    <span>Paid Upfront: </span>
+                    <strong>Rs. {lastSale.cashReceived.toFixed(2)}</strong>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--success)', fontSize: 16, fontWeight: 600 }}>
+                Change: Rs. {lastSale.changeGiven.toFixed(2)}
+              </p>
+            )}
           </div>
         </div>
       )}

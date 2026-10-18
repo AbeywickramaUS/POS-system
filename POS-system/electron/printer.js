@@ -134,8 +134,20 @@ async function printReceipt(data) {
   printer.setTextNormal();
 
   printer.println('');
-  printer.println(rightAlign('Cash:', sale.cashReceived.toFixed(2)));
-  printer.println(rightAlign('Change:', sale.changeGiven.toFixed(2)));
+  if (sale.paymentType === 'credit') {
+    printer.println(rightAlign('Payment Mode:', 'CREDIT CUSTOMER'));
+    if (sale.borrowerName) {
+      printer.println(rightAlign('Borrower:', sale.borrowerName));
+    }
+    if (sale.cashReceived > 0) {
+      printer.println(rightAlign('Paid Upfront:', sale.cashReceived.toFixed(2)));
+    }
+    printer.println(rightAlign('Added to Credit:', (sale.creditAmount || 0).toFixed(2)));
+  } else {
+    printer.println(rightAlign('Payment Mode:', 'CASH'));
+    printer.println(rightAlign('Cash:', sale.cashReceived.toFixed(2)));
+    printer.println(rightAlign('Change:', sale.changeGiven.toFixed(2)));
+  }
 
   // ===== FOOTER =====
   printer.println('='.repeat(LINE_WIDTH));

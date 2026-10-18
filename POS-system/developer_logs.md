@@ -257,3 +257,40 @@ Full browser-automated test performed:
 
 ### Status
 ✅ **System complete and fully verified**
+
+---
+
+## Log Entry #7 — Loan & Credit Transaction System with Borrower Profiles
+**Date:** 2026-10-17
+**Phase:** Feature Enhancement — Customer Credit & Loan Ledger
+
+### Key Changes
+1. **Borrower Model & Profiles (`server/models/Borrower.js`)**:
+   - Separate profile for each credit customer / borrower (name, phone, NIC, address, creditLimit, currentBalance, totalCreditGiven, totalPaid, status, notes).
+   - Dedicated indexes on name, phone, nic, and currentBalance.
+2. **Loan Transaction Ledger (`server/models/LoanTransaction.js`)**:
+   - Full audit trail recording transactions (`credit_sale`, `payment`, `manual_loan`, `adjustment`).
+   - Tracks `balanceBefore`, `balanceAfter`, `amount`, `paymentMethod`, `reference`, `invoiceNo`, and timestamps.
+3. **Sales Checkout Integration (`server/routes/sales.js` & `src/components/Sales/SalesPage.jsx`)**:
+   - Customer type toggle: **Cash Customer** (Default) vs **Credit Customer**.
+   - If **Cash**: Standard cash received and change given calculation.
+   - If **Credit**:
+     - Choose from registered borrower profiles with quick "+ New Profile" modal right from checkout.
+     - Displays borrower's current debt balance and credit limit.
+     - Supports optional upfront down payment, automatically adding the remaining balance to the borrower's debt ledger.
+     - Enforces credit limits when configured.
+     - Linked sale records `paymentType: 'credit'`, `borrower`, `borrowerName`, `creditAmount`.
+4. **Thermal Printer Integration (`electron/printer.js`)**:
+   - Prints `CREDIT CUSTOMER`, borrower name, upfront paid amount, and added credit balance on receipts.
+5. **Loan Management Section (`src/components/Loans/`)**:
+   - `LoansPage.jsx`: Top overview metric cards (Total Outstanding Debt, Total Borrowers, Total Repayments), search, filters (All / With Debt / Settled), sort options.
+   - `BorrowerFormModal.jsx`: Add / edit borrower profiles with opening balance support.
+   - `BorrowerProfileModal.jsx`: Comprehensive profile drawer/modal displaying full transaction history timeline, debt summary, available credit, print statement, and quick action buttons.
+   - `RecordPaymentModal.jsx`: Record customer repayments (Cash, Card, Bank, Cheque) with full settle and partial payment shortcuts.
+   - `ManualLoanModal.jsx`: Add manual loan or credit adjustment entries.
+6. **Invoices View (`src/components/Invoices/InvoicesPage.jsx`)**:
+   - Invoices table displays Payment Type badge (Cash / Credit) and Borrower Name.
+   - Filter invoices by Payment Mode (All / Cash / Credit).
+   - Invoice detail modal shows Customer Type, Upfront Paid, and Debt Added.
+7. **Reversal on Invoice Deletion**:
+   - Deleting a credit invoice automatically reverses the debtor's balance and creates an adjustment entry in their ledger.

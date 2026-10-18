@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { FiGrid, FiShoppingCart, FiPackage, FiSettings, FiAlertTriangle, FiFileText } from 'react-icons/fi';
+import { FiGrid, FiShoppingCart, FiPackage, FiSettings, FiAlertTriangle, FiFileText, FiUsers } from 'react-icons/fi';
 import { reportsAPI } from '../../utils/api';
 
 export default function Sidebar() {
@@ -28,6 +28,7 @@ export default function Sidebar() {
     { path: '/sales', label: 'Sales Terminal', icon: <FiShoppingCart /> },
     { path: '/inventory', label: 'Inventory', icon: <FiPackage />, badge: lowStockCount > 0 ? lowStockCount : null },
     { path: '/invoices', label: 'Invoices', icon: <FiFileText /> },
+    { path: '/loans', label: 'Credit / Borrowers', icon: <FiUsers /> },
     { path: '/settings', label: 'Settings', icon: <FiSettings /> }
   ];
 

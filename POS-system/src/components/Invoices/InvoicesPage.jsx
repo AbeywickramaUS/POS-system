@@ -19,6 +19,7 @@ export default function InvoicesPage() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [startDate, setStartDate] = React.useState('');
   const [endDate, setEndDate] = React.useState('');
+  const [paymentTypeFilter, setPaymentTypeFilter] = React.useState('all');
 
   // Detail modal
   const [selectedInvoice, setSelectedInvoice] = React.useState(null);
@@ -31,7 +32,7 @@ export default function InvoicesPage() {
 
   React.useEffect(() => {
     loadInvoices();
-  }, [page, startDate, endDate]);
+  }, [page, startDate, endDate, paymentTypeFilter]);
 
   const loadInvoices = async () => {
     setLoading(true);
@@ -39,6 +40,7 @@ export default function InvoicesPage() {
       const params = { page, limit };
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
+      if (paymentTypeFilter !== 'all') params.paymentType = paymentTypeFilter;
       const { data } = await salesAPI.getAll(params);
       setInvoices(data.sales);
       setTotal(data.total);
@@ -86,7 +88,8 @@ export default function InvoicesPage() {
 
   const filteredInvoices = searchQuery
     ? invoices.filter(inv =>
-        inv.invoiceNo.toLowerCase().includes(searchQuery.toLowerCase())
+        inv.invoiceNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (inv.borrowerName && inv.borrowerName.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : invoices;
 
@@ -108,6 +111,7 @@ export default function InvoicesPage() {
     setSearchQuery('');
     setStartDate('');
     setEndDate('');
+    setPaymentTypeFilter('all');
     setPage(1);
   };
 
@@ -157,6 +161,21 @@ export default function InvoicesPage() {
         </div>
 
         <div className="toolbar-group">
+          {/* Payment Mode Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Payment</label>
+            <select
+              className="form-select"
+              value={paymentTypeFilter}
+              onChange={(e) => { setPaymentTypeFilter(e.target.value); setPage(1); }}
+              style={{ width: 130, padding: '7px 10px', fontSize: 13 }}
+            >
+              <option value="all">All Modes</option>
+              <option value="cash">Cash Only</option>
+              <option value="credit">Credit / Loan</option>
+            </select>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <label style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>From</label>
             <input
@@ -164,7 +183,7 @@ export default function InvoicesPage() {
               className="form-input"
               value={startDate}
               onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-              style={{ width: 150 }}
+              style={{ width: 140 }}
             />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -174,10 +193,10 @@ export default function InvoicesPage() {
               className="form-input"
               value={endDate}
               onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-              style={{ width: 150 }}
+              style={{ width: 140 }}
             />
           </div>
-          {(startDate || endDate || searchQuery) && (
+          {(startDate || endDate || searchQuery || paymentTypeFilter !== 'all') && (
             <button className="btn btn-ghost btn-sm" onClick={clearFilters}>
               <FiX size={14} /> Clear
             </button>
@@ -197,7 +216,7 @@ export default function InvoicesPage() {
             <FiFileText className="icon" />
             <h3>No invoices found</h3>
             <p>
-              {searchQuery || startDate || endDate
+              {searchQuery || startDate || endDate || paymentTypeFilter !== 'all'
                 ? 'Try adjusting your filters'
                 : 'Completed sales will appear here as invoices'}
             </p>
@@ -209,14 +228,14 @@ export default function InvoicesPage() {
                 <thead>
                   <tr>
                     <th>Invoice No</th>
-                    <th>Date</th>
-                    <th>Time</th>
+                    <th>Customer / Type</th>
+                    <th>Date & Time</th>
                     <th className="text-center">Items</th>
                     <th className="text-right">Subtotal</th>
                     <th className="text-right">Discount</th>
                     <th className="text-right">Grand Total</th>
                     <th className="text-right">Cash Received</th>
-                    <th className="text-right">Change</th>
+                    <th className="text-right">Change / Debt</th>
                     <th className="text-center">Actions</th>
                   </tr>
                 </thead>
@@ -233,8 +252,22 @@ export default function InvoicesPage() {
                           {invoice.invoiceNo}
                         </span>
                       </td>
-                      <td>{formatDate(invoice.createdAt)}</td>
-                      <td style={{ color: 'var(--text-muted)' }}>{formatTime(invoice.createdAt)}</td>
+                      <td>
+                        {invoice.paymentType === 'credit' ? (
+                          <div>
+                            <span className="badge badge-warning" style={{ fontSize: 10, padding: '2px 6px' }}>Credit</span>
+                            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2, color: 'var(--text-primary)' }}>
+                              {invoice.borrowerName || 'Credit Customer'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="badge badge-success" style={{ fontSize: 10, padding: '2px 6px' }}>Cash</span>
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        <div>{formatDate(invoice.createdAt)}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{formatTime(invoice.createdAt)}</div>
+                      </td>
                       <td className="text-center">
                         <span style={{
                           background: 'var(--info-bg)',
@@ -257,8 +290,16 @@ export default function InvoicesPage() {
                         Rs. {invoice.grandTotal.toFixed(2)}
                       </td>
                       <td className="text-right font-mono">Rs. {invoice.cashReceived.toFixed(2)}</td>
-                      <td className="text-right font-mono" style={{ color: 'var(--success)' }}>
-                        Rs. {invoice.changeGiven.toFixed(2)}
+                      <td className="text-right font-mono">
+                        {invoice.paymentType === 'credit' ? (
+                          <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: 12 }}>
+                            Debt: Rs. {(invoice.creditAmount ?? (invoice.grandTotal - invoice.cashReceived)).toFixed(2)}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--success)' }}>
+                            Rs. {invoice.changeGiven.toFixed(2)}
+                          </span>
+                        )}
                       </td>
                       <td className="text-center">
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
@@ -356,7 +397,7 @@ export default function InvoicesPage() {
                   {/* Invoice Header Info */}
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
                     gap: 16,
                     marginBottom: 24,
                     padding: 16,
@@ -372,11 +413,25 @@ export default function InvoicesPage() {
                         {selectedInvoice.invoiceNo}
                       </div>
                     </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                        Payment Mode
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>
+                        {selectedInvoice.paymentType === 'credit' ? (
+                          <span style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            Credit — {selectedInvoice.borrowerName || 'Borrower'}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--success)' }}>Cash Sale</span>
+                        )}
+                      </div>
+                    </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
                         Date & Time
                       </div>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>
                         {formatDate(selectedInvoice.createdAt)} at {formatTime(selectedInvoice.createdAt)}
                       </div>
                     </div>
@@ -448,16 +503,33 @@ export default function InvoicesPage() {
                       <label>Grand Total</label>
                       <span>Rs. {selectedInvoice.grandTotal.toFixed(2)}</span>
                     </div>
-                    <div className="checkout-row" style={{ marginTop: 8 }}>
-                      <label>Cash Received</label>
-                      <span className="font-mono">Rs. {selectedInvoice.cashReceived.toFixed(2)}</span>
-                    </div>
-                    <div className="checkout-row">
-                      <label style={{ color: 'var(--success)' }}>Change Given</label>
-                      <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 600 }}>
-                        Rs. {selectedInvoice.changeGiven.toFixed(2)}
-                      </span>
-                    </div>
+                    {selectedInvoice.paymentType === 'credit' ? (
+                      <>
+                        <div className="checkout-row" style={{ marginTop: 8 }}>
+                          <label>Upfront Paid</label>
+                          <span className="font-mono">Rs. {selectedInvoice.cashReceived.toFixed(2)}</span>
+                        </div>
+                        <div className="checkout-row">
+                          <label style={{ color: 'var(--danger)', fontWeight: 600 }}>Charged to Borrower Debt</label>
+                          <span className="font-mono" style={{ color: 'var(--danger)', fontWeight: 700 }}>
+                            Rs. {(selectedInvoice.creditAmount ?? Math.max(0, selectedInvoice.grandTotal - selectedInvoice.cashReceived)).toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="checkout-row" style={{ marginTop: 8 }}>
+                          <label>Cash Received</label>
+                          <span className="font-mono">Rs. {selectedInvoice.cashReceived.toFixed(2)}</span>
+                        </div>
+                        <div className="checkout-row">
+                          <label style={{ color: 'var(--success)' }}>Change Given</label>
+                          <span className="font-mono" style={{ color: 'var(--success)', fontWeight: 600 }}>
+                            Rs. {selectedInvoice.changeGiven.toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

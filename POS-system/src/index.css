@@ -152,7 +152,23 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  justify-content: center;
+  justify-content: flex-start;
+  padding: 0 4px;
+}
+
+.sidebar-logo-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  filter: drop-shadow(0 3px 8px rgba(212, 175, 55, 0.35));
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+}
+
+.sidebar-logo-img:hover {
+  transform: scale(1.06);
+  filter: drop-shadow(0 5px 12px rgba(212, 175, 55, 0.5));
 }
 
 .sidebar-logo-icon {
@@ -168,6 +184,10 @@ body {
   box-shadow: var(--shadow-glow);
 }
 
+.sidebar-logo-text {
+  text-align: left;
+}
+
 .sidebar-logo-text h1 {
   font-size: 14px;
   font-weight: 700;
@@ -178,7 +198,9 @@ body {
 .sidebar-logo-text span {
   font-size: 11px;
   color: var(--text-muted);
-  font-weight: 400;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .sidebar-nav {

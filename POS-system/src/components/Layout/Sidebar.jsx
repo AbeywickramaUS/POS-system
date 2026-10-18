@@ -36,7 +36,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">🛒</div>
+          <img src="/logo.png" alt="Abeywickrama Super Mart" className="sidebar-logo-img" />
           <div className="sidebar-logo-text">
             <h1>Abeywickrama</h1>
             <span>Super Mart POS</span>
